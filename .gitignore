@@ -1,0 +1,3 @@
+# ignore all .tif files from folder data_env
+data_env/**/*.tif
+ 
