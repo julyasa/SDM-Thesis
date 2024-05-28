@@ -1,0 +1,73 @@
+library(SSDM)
+library(raster)
+library(sp)
+library(sf)
+library(dplyr)
+library(dismo)
+library(rJava)
+library(parallel)
+library(foreach)
+
+
+
+#Read environmental data
+#####################
+### Stack all raster files in the directory
+all_files <- list.files("~/SDM-Thesis/data_env/correction_2024-05-07_1331", full.names = TRUE)
+raster_files <- all_files[grep(".tif$", all_files, ignore.case = TRUE)]
+raster_stack <- stack(raster_files)
+
+#plot(raster_stack)
+
+Env <- raster_stack
+Env
+
+
+
+
+#Read occurrence data
+Occ <- load_occ(path = "~/SDM-Thesis/data_species",
+                file = 'triticum_essential_europe_sampled_finalfinal.csv',
+                Env, 
+                Xcol = 'Longitude', 
+                Ycol = 'Latitude',
+                Spcol = 'species',
+                sep = ',',
+                GeoRes = TRUE, #Resampling needed? If yes, set to TRUE
+                verbose = TRUE)
+head(Occ)
+nrow(Occ)
+View(Occ)
+Occ <- Occ[, c("species", "Longitude", "Latitude")]  #one of the algorhythms had problems with the X column from the resampling
+View(Occ)
+
+
+
+
+###Change Java heap size
+java_params <- getOption("java.parameters") # Retrieve the current Java parameters
+max_heap_size <- gsub("^.*-Xmx([0-9]+)([mgMG]?)$", "\\1\\2", java_params) # Extract the maximum heap size parameter (-Xmx)
+cat("Maximum Java Heap Size:", max_heap_size, "\n") # Print the maximum heap size
+options(java.parameters = "-Xmx12g")  # Sets the maximum heap size to 12 GB
+
+
+######modelling
+SDM_MAXENT_a <- modelling('MAXENT', #ANN, GLM, MAXENT, CTA, RF, MARS, SVM, GAM, GBM
+                        Occ, 
+                        Env, 
+                        Xcol = 'Longitude', 
+                        Ycol = 'Latitude', 
+                        Pcol = NULL,
+                        PA = NULL,
+                        cv = 'holdout',
+                        cv.param = c(0.7, 3),
+                        bin.thresh = 'TSS', #This will automatically determine the binary threshold that maximizes the TSS metric. (otherwise set threshhold to e.g. 0,5)
+                        axes.metric = 'Pearson', #Pearson, AUC, Kappa, sensitivity, specificity, and prop.correct (proportion of correctly predicted occurrences).
+                        #maxent.args=list( #auto=true does not work, probably default is auto
+                          #quadratic=true,
+                          #product=true,
+                          #threshold=true,
+                          #hinge=true,
+                          #linear=true
+                          #),
+                        verbose = TRUE)
